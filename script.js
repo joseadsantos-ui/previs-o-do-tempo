@@ -362,3 +362,17 @@ function mostrarHistorico() {
 }
 
 mostrarHistorico();
+
+// ============================================
+// MELHORIA 7 — aplicativo instalável (PWA)
+// Registra o service worker (sw.js). Só funciona em https:// ou
+// localhost; abrindo o arquivo direto (file://) o registro é ignorado
+// e o app continua funcionando normalmente.
+// ============================================
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((erro) => {
+      console.warn("Service worker não registrado:", erro.message);
+    });
+  });
+}

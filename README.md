@@ -67,3 +67,23 @@ o nome exibido é o que a API devolve, não o que o usuário digitou.
    pedras de gelo e pingentes de gelo no topo, tudo em CSS puro (sem imagem e
    sem JavaScript). As animações são desligadas para quem ativa "reduzir
    movimento" no sistema (`prefers-reduced-motion`).
+7. **Aplicativo instalável (PWA).** O projeto tem `manifest.json`, um
+   service worker (`sw.js`) e ícones na pasta `icons/`. O service worker guarda
+   os arquivos do app para ele abrir sem internet; as consultas à API não são
+   guardadas, então sem conexão aparece a mensagem de erro, e não um clima
+   antigo.
+
+## Instalar como aplicativo
+
+A instalação exige **https** (ou `localhost`). Abrir o `index.html` direto do
+computador (`file://`) não permite instalar.
+
+1. Publique no GitHub Pages: no repositório, vá em **Settings > Pages**,
+   escolha a branch `main` e a pasta `/ (root)` e salve.
+2. Abra o endereço gerado (`https://USUARIO.github.io/NOME-DO-REPO/`).
+3. Instale:
+   - **Android (Chrome):** menu ⋮ > *Instalar aplicativo*.
+   - **iPhone/iPad (Safari):** botão Compartilhar > *Adicionar à Tela de Início*.
+   - **Windows/Mac (Chrome ou Edge):** ícone de instalar na barra de endereço.
+
+Ao alterar qualquer arquivo, aumente o número de `VERSAO` em `sw.js`.
