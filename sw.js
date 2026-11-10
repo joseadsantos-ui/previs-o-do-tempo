@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do app para abrir mesmo sem internet.
 // Troque o número da versão sempre que alterar algum arquivo do projeto.
-const VERSAO = "clima-v1";
+const VERSAO = "clima-v3";
 const ARQUIVOS = [
   "./",
   "index.html",

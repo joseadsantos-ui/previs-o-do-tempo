@@ -30,12 +30,11 @@ body[data-dia="noite"]      { --g1: #0b1d3a; --g2: #2a3f6b; }
 .container { width: 100%; max-width: 460px; margin: 0 auto; }
 
 h1 {
-  margin: 8px 0 4px;
+  margin: 8px 0 20px;
   font-size: 1.9rem;
   color: #fff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, .3);
 }
-.intro { margin: 0 0 20px; color: rgba(255, 255, 255, .92); font-size: .92rem; }
 
 /* Cartão de busca */
 .busca {

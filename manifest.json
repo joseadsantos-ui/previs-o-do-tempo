@@ -1,7 +1,7 @@
 {
-  "id": "./",
-  "name": "Consulta do Clima",
-  "short_name": "Clima",
+  "id": "/tempoagora-senai",
+  "name": "TempoAgora - Consulta do Clima",
+  "short_name": "TempoAgora",
   "description": "Consulta o clima de qualquer cidade em tempo real.",
   "lang": "pt-BR",
   "start_url": "./index.html",

@@ -1,11 +1,10 @@
 // ============================================
-// 1. CONFIGURAÇÃO DA API — Open-Meteo (não exige chave)
+// 1. CONFIGURAÇÃO DA API — wttr.in (não exige chave)
 // ============================================
-// A Open-Meteo trabalha em duas etapas: primeiro a geocodificação
-// transforma o nome da cidade em latitude/longitude, depois a consulta
-// de clima usa essas coordenadas.
-const GEO_URL = "https://geocoding-api.open-meteo.com/v1/search";
-const CLIMA_URL = "https://api.open-meteo.com/v1/forecast";
+// A wttr.in aceita o nome da cidade direto na URL e devolve tudo em uma
+// única requisição (formato j1 = JSON): local, clima atual e nascer/pôr
+// do sol. Não há etapa de geocodificação.
+const CLIMA_URL = "https://wttr.in";
 
 // ============================================
 // 2. ELEMENTOS DA PÁGINA
@@ -17,44 +16,50 @@ const historico = document.getElementById("historico");
 const listaHistorico = document.getElementById("listaHistorico");
 
 // ============================================
-// MELHORIA 1 — tradução do weather_code
-// A Open-Meteo não devolve a condição climática por escrito, só um
-// número (weather_code) no padrão WMO. Esta tabela transforma o número
-// em texto e ícone para o usuário entender.
+// MELHORIA 1 — tradução do weatherCode
+// A wttr.in devolve um código numérico (padrão World Weather Online) e
+// uma descrição, que pedimos em português com lang=pt. Esta função
+// agrupa os códigos em categorias para escolher o desenho e o fundo.
 // ============================================
-const TEMPOS = {
-  0: { icone: "☀️", texto: "Céu limpo" },
-  1: { icone: "🌤️", texto: "Predominantemente limpo" },
-  2: { icone: "⛅", texto: "Parcialmente nublado" },
-  3: { icone: "☁️", texto: "Nublado" },
-  45: { icone: "🌫️", texto: "Nevoeiro" },
-  48: { icone: "🌫️", texto: "Nevoeiro com geada" },
-  51: { icone: "🌦️", texto: "Garoa fraca" },
-  53: { icone: "🌦️", texto: "Garoa moderada" },
-  55: { icone: "🌦️", texto: "Garoa forte" },
-  56: { icone: "🌧️", texto: "Garoa congelante fraca" },
-  57: { icone: "🌧️", texto: "Garoa congelante forte" },
-  61: { icone: "🌧️", texto: "Chuva fraca" },
-  63: { icone: "🌧️", texto: "Chuva moderada" },
-  65: { icone: "🌧️", texto: "Chuva forte" },
-  66: { icone: "🌧️", texto: "Chuva congelante fraca" },
-  67: { icone: "🌧️", texto: "Chuva congelante forte" },
-  71: { icone: "🌨️", texto: "Neve fraca" },
-  73: { icone: "🌨️", texto: "Neve moderada" },
-  75: { icone: "🌨️", texto: "Neve forte" },
-  77: { icone: "🌨️", texto: "Grãos de neve" },
-  80: { icone: "🌦️", texto: "Pancadas de chuva fracas" },
-  81: { icone: "🌧️", texto: "Pancadas de chuva moderadas" },
-  82: { icone: "🌧️", texto: "Pancadas de chuva fortes" },
-  85: { icone: "🌨️", texto: "Pancadas de neve fracas" },
-  86: { icone: "🌨️", texto: "Pancadas de neve fortes" },
-  95: { icone: "⛈️", texto: "Trovoada" },
-  96: { icone: "⛈️", texto: "Trovoada com granizo leve" },
-  99: { icone: "⛈️", texto: "Trovoada com granizo forte" }
-};
+const CODIGOS_NEVOEIRO = [143, 248, 260];
+const CODIGOS_NEVE = [179, 182, 227, 230, 317, 320, 323, 326, 329, 332, 335,
+  338, 350, 362, 365, 368, 371, 374, 377];
+const CODIGOS_TROVOADA = [200, 386, 389, 392, 395];
 
-function descreverTempo(codigo) {
-  return TEMPOS[codigo] || { icone: "🌡️", texto: "Condição não identificada" };
+function categoria(codigo) {
+  codigo = Number(codigo);
+  if (codigo === 113) return "limpo";
+  if (codigo === 116) return "parcial";
+  if (codigo === 119 || codigo === 122) return "nublado";
+  if (CODIGOS_NEVOEIRO.includes(codigo)) return "nevoeiro";
+  if (CODIGOS_NEVE.includes(codigo)) return "neve";
+  if (CODIGOS_TROVOADA.includes(codigo)) return "trovoada";
+  return "chuva";
+}
+
+// Texto da condição: usa a descrição em português da API.
+function descreverTempo(atual) {
+  const pt = atual.lang_pt && atual.lang_pt[0] && atual.lang_pt[0].value;
+  const en = atual.weatherDesc && atual.weatherDesc[0] && atual.weatherDesc[0].value;
+  return pt || en || "Condição não identificada";
+}
+
+// A API devolve horas como "06:03 AM". Converte para minutos do dia.
+function paraMinutos(texto) {
+  const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((texto || "").trim());
+  if (!m) return null;
+  let h = Number(m[1]) % 12;
+  if (m[3].toUpperCase() === "PM") h += 12;
+  return h * 60 + Number(m[2]);
+}
+
+// Dia ou noite: compara a hora da medição com nascer e pôr do sol.
+function eDia(atual, astronomia) {
+  const agora = paraMinutos((atual.localObsDateTime || "").split(" ").slice(1).join(" "));
+  const nascer = paraMinutos(astronomia && astronomia.sunrise);
+  const poente = paraMinutos(astronomia && astronomia.sunset);
+  if (agora === null || nascer === null || poente === null) return true;
+  return agora >= nascer && agora < poente;
 }
 
 // ============================================
@@ -84,50 +89,52 @@ function buscarClima() {
 
   mostrarCarregando();
 
-  // 1) Descobre a latitude e a longitude da cidade digitada
-  const urlBusca =
-    `${GEO_URL}?name=${encodeURIComponent(cidade)}` +
-    `&count=1&language=pt&format=json`;
+  // Uma única requisição: a cidade vai direto na URL
+  const url =
+    `${CLIMA_URL}/${encodeURIComponent(cidade)}?format=j1&lang=pt`;
 
-  let local = null;
-
-  fetch(urlBusca)
+  fetch(url)
     .then(resposta => {
-      if (!resposta.ok) {
-        throw new Error("Falha na busca da cidade.");
+      // Para cidade inexistente a wttr.in responde com erro HTTP e um
+      // texto simples (não JSON).
+      if (resposta.status === 404) {
+        const erro = new Error("Cidade não encontrada.");
+        erro.tipo = "cidade";
+        throw erro;
       }
-      return resposta.json();
+      if (!resposta.ok) {
+        throw new Error("Falha na consulta do clima.");
+      }
+      return resposta.text();
     })
-    .then(dadosCidade => {
-      // A Open-Meteo NÃO devolve erro HTTP quando a cidade não existe:
-      // ela simplesmente responde sem a lista "results".
-      if (!dadosCidade.results || dadosCidade.results.length === 0) {
+    .then(texto => {
+      let dados;
+      try {
+        dados = JSON.parse(texto);
+      } catch (e) {
         const erro = new Error("Cidade não encontrada.");
         erro.tipo = "cidade";
         throw erro;
       }
 
-      local = dadosCidade.results[0];
-
-      // 2) Usa a latitude e a longitude para consultar o clima
-      const urlClima =
-        `${CLIMA_URL}?latitude=${local.latitude}` +
-        `&longitude=${local.longitude}` +
-        `&current=temperature_2m,relative_humidity_2m` +
-        `,apparent_temperature,wind_speed_10m,weather_code,is_day` +
-        `&timezone=auto`;
-
-      return fetch(urlClima);
-    })
-    .then(resposta => {
-      if (!resposta.ok) {
-        throw new Error("Falha na consulta do clima.");
+      const atual = dados.current_condition && dados.current_condition[0];
+      const area = dados.nearest_area && dados.nearest_area[0];
+      if (!atual || !area) {
+        const erro = new Error("Cidade não encontrada.");
+        erro.tipo = "cidade";
+        throw erro;
       }
-      return resposta.json();
-    })
-    .then(dadosClima => {
-      const atual = dadosClima.current;
-      mostrarResultado(local, atual);
+
+      const astronomia = dados.weather && dados.weather[0] &&
+        dados.weather[0].astronomy && dados.weather[0].astronomy[0];
+
+      const local = {
+        name: valor(area.areaName) || cidade,
+        admin1: valor(area.region),
+        country: valor(area.country)
+      };
+
+      mostrarResultado(local, atual, astronomia);
       salvarNoHistorico(local.name);
     })
     .catch(erro => {
@@ -150,6 +157,11 @@ function buscarClima() {
       botaoBuscar.disabled = false;
       botaoBuscar.textContent = "Buscar clima";
     });
+}
+
+// A wttr.in guarda textos assim: [{ "value": "Rio do Sul" }]
+function valor(lista) {
+  return lista && lista[0] ? lista[0].value : "";
 }
 
 // ============================================
@@ -177,20 +189,10 @@ function mostrarErro(texto) {
 
 // ============================================
 // MELHORIA 4 — ilustrações em SVG e fundo que muda com o tempo
-// Cada weather_code vira uma categoria; a categoria define o desenho
+// Cada weatherCode vira uma categoria; a categoria define o desenho
 // (SVG feito no código, sem imagens externas) e as cores do fundo.
-// O parâmetro is_day da API diz se é dia ou noite.
+// Dia ou noite é calculado com o nascer e o pôr do sol da API.
 // ============================================
-function categoria(codigo) {
-  if (codigo === 0 || codigo === 1) return "limpo";
-  if (codigo === 2) return "parcial";
-  if (codigo === 3) return "nublado";
-  if (codigo === 45 || codigo === 48) return "nevoeiro";
-  if ((codigo >= 71 && codigo <= 77) || codigo === 85 || codigo === 86) return "neve";
-  if (codigo >= 95) return "trovoada";
-  return "chuva";
-}
-
 const NUVEM = '<path class="nuvem" d="M22 50a13 13 0 0 1-1-26 18 18 0 0 1 35-2 14 14 0 0 1 2 28z"/>';
 const SOL = '<g class="sol"><circle cx="40" cy="30" r="13"/>' +
   '<path d="M58 30h6M52.7 42.7l4.3 4.3M40 48v6M27.3 42.7L23 47M22 30h-6M27.3 17.3L23 13M40 12V6M52.7 17.3L57 13"/></g>';
@@ -222,10 +224,10 @@ function desenharIcone(tipo, dia) {
   return '<svg viewBox="0 0 80 70" xmlns="http://www.w3.org/2000/svg">' + corpo + '</svg>';
 }
 
-function mostrarResultado(local, atual) {
-  const tempo = descreverTempo(atual.weather_code);
-  const tipo = categoria(atual.weather_code);
-  const dia = atual.is_day !== 0;
+function mostrarResultado(local, atual, astronomia) {
+  const tempo = descreverTempo(atual);
+  const tipo = categoria(atual.weatherCode);
+  const dia = eDia(atual, astronomia);
 
   // O fundo da página muda pelos atributos data-* (ver style.css)
   document.body.dataset.tempo = tipo;
@@ -249,10 +251,10 @@ function mostrarResultado(local, atual) {
   bloco.className = "temp-bloco";
   const temperatura = document.createElement("p");
   temperatura.className = "temperatura";
-  temperatura.textContent = `${Math.round(atual.temperature_2m)}°C`;
+  temperatura.textContent = `${Math.round(Number(atual.temp_C))}°C`;
   const condicao = document.createElement("p");
   condicao.className = "condicao";
-  condicao.textContent = tempo.texto;
+  condicao.textContent = tempo;
   bloco.append(temperatura, condicao);
   topo.append(ilustracao, bloco);
 
@@ -271,14 +273,14 @@ function mostrarResultado(local, atual) {
   const grade = document.createElement("div");
   grade.className = "grade";
   grade.append(
-    linhaDado("Sensação", `${Math.round(atual.apparent_temperature)}°C`),
-    linhaDado("Umidade", `${atual.relative_humidity_2m}%`),
-    linhaDado("Vento", `${atual.wind_speed_10m} km/h`)
+    linhaDado("Sensação", `${Math.round(Number(atual.FeelsLikeC))}°C`),
+    linhaDado("Umidade", `${atual.humidity}%`),
+    linhaDado("Vento", `${atual.windspeedKmph} km/h`)
   );
 
   const atualizado = document.createElement("p");
   atualizado.className = "atualizado";
-  atualizado.textContent = `Medição de ${formatarHora(atual.time)}`;
+  atualizado.textContent = `Medição de ${formatarHora(atual.localObsDateTime)}`;
 
   corpo.append(titulo, ondeFica, grade, atualizado);
   card.append(topo, corpo);
@@ -298,14 +300,16 @@ function linhaDado(rotulo, valor) {
   return caixa;
 }
 
-// A API devolve a hora no formato 2026-09-02T15:00
+// A API devolve a hora no formato 2026-11-10 06:15 PM
 function formatarHora(texto) {
-  if (!texto) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})\s+(.+)$/.exec(texto || "");
+  const minutos = m ? paraMinutos(m[4]) : null;
+  if (!m || minutos === null) {
     return "horário não informado";
   }
-  const [data, hora] = texto.split("T");
-  const [ano, mes, dia] = data.split("-");
-  return `${dia}/${mes}/${ano} às ${hora}`;
+  const hh = String(Math.floor(minutos / 60)).padStart(2, "0");
+  const mm = String(minutos % 60).padStart(2, "0");
+  return `${m[3]}/${m[2]}/${m[1]} às ${hh}:${mm}`;
 }
 
 // ============================================
